@@ -1,34 +1,77 @@
-import spacy
+import os
+import requests
+from typing import List, Dict, Any
+import json
 import re
+from dotenv import load_dotenv
+import logging
+from services.validator import postprocess_tasks
+from utils.config import get_env_var
+from utils.logging import setup_logging
 
-nlp = spacy.load("pt_core_news_md")
+setup_logging()
 
-PRAZO_REGEX = re.compile(r"até [\w\s]+|amanhã|hoje|na próxima semana|semana que vem|mês que vem", re.IGNORECASE)
+logger = logging.getLogger(__name__)
 
-def extract_tasks(texto: str):
-    doc = nlp(texto)
-    tarefas = []
+GEMINI_API_KEY = get_env_var("GEMINI_API_KEY", required=True)
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
-    for sent in doc.sents:
-        sent_text = sent.text
-        sent_doc = nlp(sent_text)
-        pessoas = [ent.text for ent in sent_doc.ents if ent.label_ == "PER"]
-        verbos = [token.text for token in sent_doc if token.pos_ == "VERB"]
-        prazo = PRAZO_REGEX.search(sent_text)
+PROMPT_TEMPLATE = """
+Analise o texto abaixo, identifique para cada pessoa:
+- O que foi feito
+- O que vai ser feito
 
-        for pessoa in pessoas:
-            if verbos:
-                tarefas.append({
-                    "responsavel": pessoa,
-                    "tarefa": f"{verbos[0]} {extract_complement(sent_doc, verbos[0])}",
-                    "prazo": prazo.group(0) if prazo else None
-                })
+Para cada tarefa a fazer, retorne um objeto com:
+- task: nome da tarefa
+- prazo: expressão do prazo (ex: amanhã, sexta-feira, fim do dia)
+- data_prazo: data no formato AAAA-MM-DD se possível identificar, senão deixe vazio
+- descricao: pequena descrição adicional se houver
 
-    return tarefas
+Retorne um JSON no formato:
+[
+  {{
+    "responsavel": "Nome",
+    "feitas": ["tarefa1", ...],
+    "a_fazer": [
+      {{
+        "task": "nome da tarefa",
+        "prazo": "expressão do prazo",
+        "data_prazo": "AAAA-MM-DD",
+        "descricao": "descrição adicional"
+      }}
+    ]
+  }}
+]
 
-def extract_complement(doc, verbo):
-    for token in doc:
-        if token.text == verbo:
-            complement = " ".join([child.text for child in token.children if child.dep_ in ["obj", "xcomp", "advmod"]])
-            return complement
-    return ""
+Texto: {texto}
+"""
+
+def extract_tasks_with_gemini(texto: str) -> List[Dict[str, Any]]:
+    prompt = PROMPT_TEMPLATE.format(texto=texto)
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+    logger.info("Enviando requisição para Gemini API.")
+    try:
+        response = requests.post(GEMINI_URL, json=payload, timeout=30)
+        response.raise_for_status()
+        logger.info("Resposta recebida da Gemini API com status %s", response.status_code)
+        result_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        match = re.search(r'\[.*\]', result_text, re.DOTALL)
+        if match:
+            json_str = match.group(0)
+            try:
+                data = json.loads(json_str)
+                return postprocess_tasks(data)
+            except Exception as e:
+                logger.error("Erro ao fazer parse do JSON retornado pela Gemini: %s", e)
+                return [{"erro": "Erro ao processar resposta da IA. Tente novamente mais tarde."}]
+        else:
+            logger.warning("Não foi possível extrair JSON da resposta da Gemini.")
+            return [{"erro": "Resposta da IA não está no formato esperado."}]
+    except requests.RequestException as e:
+        logger.error("Erro de comunicação com a Gemini API: %s", e)
+        return [{"erro": "Erro de comunicação com a IA. Tente novamente mais tarde."}]
+    except Exception as e:
+        logger.critical("Erro inesperado: %s", e)
+        return [{"erro": "Erro inesperado. Tente novamente mais tarde."}]
