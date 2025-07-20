@@ -1,6 +1,7 @@
 fastapi
 uvicorn
-spacy
-dateparser
+requests
 python-dotenv
+dateparser
 slowapi
+pydantic
