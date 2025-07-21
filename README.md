@@ -88,6 +88,45 @@ POST /extract-tasks
 ]
 ```
 
+### Modos de extração de tarefas
+
+O backend suporta três modos de extração de tarefas:
+
+- **Gemini (nuvem):** Usa LLM da Google Gemini. Os dados são enviados para a nuvem. Ideal para máxima inteligência, mas pode expor dados sensíveis.
+- **spaCy (local):** Usa processamento de linguagem natural local com spaCy e regras. Não envia dados para a nuvem, ideal para privacidade e uso em ambientes restritos.
+- **auto (híbrido):** Tenta extrair tarefas com spaCy primeiro (rápido e privativo). Se o resultado for vazio ou de baixa confiança, faz fallback automático para Gemini, garantindo máxima robustez.
+
+### Como escolher o modo
+
+No corpo da requisição, envie o campo `provedor` com um destes valores:
+- `"spacy"` — força uso local
+- `"gemini"` — força uso nuvem
+- `"auto"` — (recomendado) tenta local, faz fallback para nuvem se necessário
+
+Exemplo de payload:
+```json
+{
+  "texto": "Lucas disse que ontem finalizou o componente de login, mas ainda precisa revisar a integração com o backend.",
+  "provedor": "auto"
+}
+```
+
+No modo `auto`, o backend só envia dados para a nuvem se o spaCy não conseguir extrair tarefas com confiança.
+
+### Instalação do modelo spaCy para português
+
+Se for usar o modo spaCy, instale o modelo de português (recomendado usar o modelo grande):
+
+```bash
+pip install spacy
+python -m spacy download pt_core_news_lg
+```
+
+Se rodar em Docker, adicione ao Dockerfile:
+```Dockerfile
+RUN python -m spacy download pt_core_news_lg
+```
+
 ## 🧪 Testes
 Execute os testes automatizados com:
 ```sh

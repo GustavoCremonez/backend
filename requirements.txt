@@ -5,3 +5,4 @@ python-dotenv
 dateparser
 slowapi
 pydantic
+google-generativeai

@@ -1,21 +1,21 @@
-# Use imagem oficial do Python
+# Use a imagem oficial do Python
 FROM python:3.12-slim
 
-# Diretório de trabalho
+# Define o diretório de trabalho
 WORKDIR /app
 
-# Copie os arquivos de requirements e instale dependências
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Copia o arquivo de dependências
+COPY requirements.txt .
 
-# Copie o restante do código
+# Instala as dependências
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir spacy && python -m spacy download pt_core_news_lg
+
+# Copia o resto do código da aplicação
 COPY . .
 
-# Variável de ambiente para produção
-ENV PYTHONUNBUFFERED=1
-
-# Exponha a porta padrão do FastAPI/Uvicorn
+# Expõe a porta que o app vai rodar
 EXPOSE 8000
 
-# Comando para rodar o servidor
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"] 
+# Comando para rodar a aplicação com Uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"] 
