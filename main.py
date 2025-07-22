@@ -13,10 +13,9 @@ class TextoRequest(BaseModel):
 
 app = FastAPI()
 
-# CORS temporário: libera tudo para desenvolvimento
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://tarefai-eta.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
