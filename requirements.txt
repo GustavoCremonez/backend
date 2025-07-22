@@ -6,3 +6,5 @@ dateparser
 slowapi
 pydantic
 google-generativeai
+spacy
+httpx
