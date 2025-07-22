@@ -10,6 +10,10 @@ import main
 from datetime import datetime
 
 class TestExtractor(unittest.TestCase):
+    def setUp(self):
+        import os
+        os.environ["GEMINI_API_KEY"] = "fake-key"
+
     def test_extract_tasks_with_spacy_simple(self):
         texto = "Lucas: Ontem finalizei o componente de login, mas ainda preciso revisar a integração com o backend."
         resultado = extract_tasks_with_spacy(texto)
