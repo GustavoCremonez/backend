@@ -46,8 +46,9 @@ ruler.add_patterns([
 ])
 
 def normalize_nome(nome: str) -> str:
-    """Normaliza nomes e apelidos para nomes completos e capitalizados."""
+    """Normaliza nomes e apelidos conhecidos para nomes completos e capitalizados. Não agrupa nomes diferentes."""
     nome = nome.strip()
+    # Só normaliza apelidos conhecidos, não nomes diferentes
     return APELIDOS.get(nome, " ".join([n.capitalize() for n in nome.split()]))
 
 def split_subfrases(frase: str) -> List[str]:
@@ -102,8 +103,9 @@ def coreferencia_simples(subfrase: str, ultimo_nome: str) -> str:
     return ""
 
 def separar_falas(texto: str) -> List[Dict[str, str]]:
-    """Separa o texto em blocos de fala por participante."""
-    blocos = re.split(r'(?m)^([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+):', texto)
+    """Separa o texto em blocos de fala por participante, tolerando espaços e quebras de linha."""
+    # Regex: início de linha, possíveis espaços, nome (letra maiúscula/acento), dois pontos
+    blocos = re.split(r'(?m)^[ \t]*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wáéíóúâêôãõç\s]*)\s*:', texto)
     falas = []
     i = 1
     while i < len(blocos):
@@ -111,16 +113,24 @@ def separar_falas(texto: str) -> List[Dict[str, str]]:
         fala = blocos[i+1].strip() if i+1 < len(blocos) else ""
         falas.append({"responsavel": normalize_nome(nome), "fala": fala})
         i += 2
+    if not falas:
+        logger.warning(f"Nenhuma fala separada! Texto: {texto[:200]}")
+    else:
+        logger.debug(f"Falas separadas: {[f['responsavel'] for f in falas]}")
     return falas
 
 def agrupar_por_pessoa(lista_falas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Agrupa tarefas feitas e a fazer por responsável."""
-    agrupado = defaultdict(lambda: {"responsavel": "", "feitas": [], "a_fazer": []})
+    """Agrupa tarefas feitas e a fazer por responsável, sem misturar nomes diferentes."""
+    agrupado = {}
     for item in lista_falas:
         nome = item["responsavel"]
-        agrupado[nome]["responsavel"] = nome
+        if nome not in agrupado:
+            agrupado[nome] = {"responsavel": nome, "feitas": [], "a_fazer": []}
         agrupado[nome]["feitas"].extend(item["feitas"])
         agrupado[nome]["a_fazer"].extend(item["a_fazer"])
+    # Debug: print agrupamento se houver nomes diferentes agrupados
+    if len(agrupado) != len(lista_falas):
+        logger.debug(f"Agrupamento de responsáveis: {list(agrupado.keys())}")
     return list(agrupado.values())
 
 def extract_tasks_with_spacy(texto: str) -> List[Dict[str, Any]]:
